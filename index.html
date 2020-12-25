@@ -1,0 +1,201 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            margin: 0px;
+        }
+    </style>
+
+    <script type="text/javascript" src="brython.js"></script>
+    <script type="text/javascript" src="brython_stdlib.js"></script>
+</head>
+
+<body onload="brython()">
+    <script type="module">
+        import * as THREE from './build/three.module.js';
+        import { OrbitControls } from './extra/jsm/controls/OrbitControls.js';
+
+        let camera, cameraControls, scene, renderer;
+        let geometry, material, mesh;
+
+        init();
+
+        function init() {
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setAnimationLoop(animation);
+            document.body.appendChild(renderer.domElement);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+            camera.position.z = 10;
+
+            cameraControls = new OrbitControls(camera, renderer.domElement);
+            cameraControls.target.set(0, -0.5, 0);
+            cameraControls.update();
+
+            scene = new THREE.Scene();
+
+            geometry = new THREE.ConeGeometry(2.5, 9, 16);
+
+            material = new THREE.MeshPhongMaterial({
+                side: THREE.DoubleSide,
+                color: "rgb(0, 200, 0)",
+                opacity: 0.7,
+                transparent: true,
+            });
+            material.side = THREE.DoubleSide;
+
+            const directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
+            directionalLight.target.position.set(1,1,1);
+           scene.add( directionalLight );
+
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, 0, 0);
+            scene.add(mesh);
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            (async () => {
+                let coords = await fetch('./Python/coords.txt');
+                let coordsData = await coords.text();
+
+                coordsData = coordsData.replaceAll('\n', ',\n');
+                coordsData = `[\n${coordsData}]\n`; // put data into array-format for JSON parsing
+                coordsData = JSON.parse(coordsData);
+
+                window.materials = []
+
+                for (let coord of coordsData) {
+                    const geometry = new THREE.SphereGeometry(0.03, 32, 32);
+                    const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                    const sphere = new THREE.Mesh(geometry, material);
+
+                    const coordScale = 0.01;
+                    sphere.position.set(coord[0] * coordScale, coord[2] * coordScale, coord[1] * coordScale);
+                    scene.add(sphere);
+
+                    window.materials.push(material);
+                }
+            })();
+        }
+
+        function animation(time) {
+            cameraControls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+
+    <script type="text/python" src="/xmaslights-spin.py"></script>
+</body>
+
+<script>
+function set_LED_value(index, rgb) {
+    var hsv= RGBtoHSV(rgb);
+    hsv[1] *= 4.5;
+    hsv[2] *= 4.5;
+    var boosted_rgb = HSVtoRGB(hsv);
+
+    // NOTE THE LEDS ARE GRB COLOUR (NOT RGB)
+    let [g, r, b] = boosted_rgb;
+    window.materials[index].color.setRGB(r / 255.0, g / 255.0, b / 255.0);
+}
+
+RGBtoHSV= function(color) {
+        var r,g,b,h,s,v;
+        r= color[0];
+        g= color[1];
+        b= color[2];
+        min = Math.min( r, g, b );
+        max = Math.max( r, g, b );
+
+
+        v = max;
+        delta = max - min;
+        if( max != 0 )
+            s = delta / max;        // s
+        else {
+            // r = g = b = 0        // s = 0, v is undefined
+            s = 0;
+            h = -1;
+            return [h, s, undefined];
+        }
+        if( r === max )
+            h = ( g - b ) / delta;      // between yellow & magenta
+        else if( g === max )
+            h = 2 + ( b - r ) / delta;  // between cyan & yellow
+        else
+            h = 4 + ( r - g ) / delta;  // between magenta & cyan
+        h *= 60;                // degrees
+        if( h < 0 )
+            h += 360;
+        if ( isNaN(h) )
+            h = 0;
+        return [h,s,v];
+    };
+
+HSVtoRGB= function(color) {
+        var i;
+        var h,s,v,r,g,b;
+        h= color[0];
+        s= color[1];
+        v= color[2];
+        if(s === 0 ) {
+            // achromatic (grey)
+            r = g = b = v;
+            return [r,g,b];
+        }
+        h /= 60;            // sector 0 to 5
+        i = Math.floor( h );
+        f = h - i;          // factorial part of h
+        p = v * ( 1 - s );
+        q = v * ( 1 - s * f );
+        t = v * ( 1 - s * ( 1 - f ) );
+        switch( i ) {
+            case 0:
+                r = v;
+                g = t;
+                b = p;
+                break;
+            case 1:
+                r = q;
+                g = v;
+                b = p;
+                break;
+            case 2:
+                r = p;
+                g = v;
+                b = t;
+                break;
+            case 3:
+                r = p;
+                g = q;
+                b = v;
+                break;
+            case 4:
+                r = t;
+                g = p;
+                b = v;
+                break;
+            default:        // case 5:
+                r = v;
+                g = p;
+                b = q;
+                break;
+        }
+        return [r,g,b];
+    }
+</script>
+
+</html>
